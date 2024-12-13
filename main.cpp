@@ -13,7 +13,12 @@ RobomasM rmm(M2006, mode3_gear_limitless);
 
 DigitalOut led1(LED1);
 
+DigitalIn sw(PA_10, PullUp);
+
 Ticker tic_motor;
+Ticker tic_sw;
+
+bool motor_status = false;
 
 const short current_max = 2500; //電流上限　10000までの値
 const float target_speed = 12.56; //目標角速度
@@ -25,6 +30,7 @@ int main()
     run();
 
     while(true){
+        printf("motor_status:%d\n", (int)motor_status);
         printf("target_speed:%f\n", target_speed);
         printf("feedback speed:%f\n\n",rmm.motor.getOmega());
         thread_sleep_for(500);
@@ -33,7 +39,12 @@ int main()
 }
 
 void motorCallback(){
-    rmm.speedControll();
+    if(motor_status) {
+        rmm.speedControll();
+    }
+    else {
+        rmm.motor.stop();
+    }
 
     char can_data[2] = {}; //送りたいデータを入れる箱
     can_data[0] = rmm.getCurrent1();
@@ -41,6 +52,22 @@ void motorCallback(){
 
     CANMessage msg(TARGET_CAN_ID, can_data, 2); //CANプロトコルに変換
     can_rmm.write(msg); //CANデータを送信
+}
+
+bool lastSwState = true;
+void swCallBack(){
+    bool sw_now = sw.read();
+    if(!sw_now && lastSwState){
+        motor_status = !motor_status;
+    }
+    lastSwState = sw_now;
+    if(motor_status) {
+        rmm.setTargetSpeed(target_speed);
+    }
+    else {
+        rmm.setTargetSpeed(0);
+    }
+
 }
 
 void CAN_recieve(){
@@ -64,6 +91,8 @@ void run(){
     motor_init();
 
     tic_motor.attach(&motorCallback,1ms); //割り込みタイマーをオンにする
+    tic_sw.attach(&swCallBack,10ms);
+
     thread_sleep_for(50);
 
     rmm.setTargetSpeed(target_speed);
