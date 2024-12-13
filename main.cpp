@@ -2,7 +2,7 @@
 #include "RobomasM.hpp"
 
 #define TARGET_CAN_ID 0x200   //コントロール識別子（モーター１～４）
-#define RECIEVE_CAN_ID1 0x201   //フィードバック識別子（モーター１,m2006）
+#define RECIEVE_CAN_ID 0x201   //フィードバック識別子（モーター１,m2006）
 #define CAN_Hz_RMM 1000000 //CANに使用するクロック周波数[Hz] CAN通信相手と共通させる
 
 CAN can_rmm(PA_11, PA_12, CAN_Hz_RMM); //CAN_RD, CAN_TD, CAN_Hzの順
@@ -15,18 +15,19 @@ DigitalOut led1(LED1);
 
 Ticker tic_motor;
 
-void setup();
+const short current_max = 2500; //電流上限　10000までの値
+const float target_speed = 12.56; //目標角速度
+
+void run();
 
 int main()
 {
-    setup();
-
-    float target_speed = 3.14;
-    rmm.setTargetSpeed(target_speed);
+    run();
 
     while(true){
         printf("target_speed:%f\n", target_speed);
-        printf("current:%d\n\n",rmm.getCurrent());
+        printf("feedback speed:%f\n\n",rmm.motor.getOmega());
+        thread_sleep_for(500);
     }
 
 }
@@ -45,20 +46,19 @@ void motorCallback(){
 void CAN_recieve(){
     CANMessage msg;
     if(can_rmm.read(msg)){  
-        if(msg.id == RECIEVE_CAN_ID1){
+        if(msg.id == RECIEVE_CAN_ID){
             rmm.calcData(&msg);
         }
     }
 }
 
 void motor_init() {
-    rmm.speed_pid.setParameter(600, 150, 0);
-    rmm.angle_omega_pid.setParameter(0, 0, 0);
-    rmm.motor.setPowerMax(2500);
+    rmm.speed_pid.setParameter(400, 0, 0); //600 150 0
+    rmm.motor.setPowerMax(current_max);
     rmm.motor.stop();
 }
 
-void setup(){
+void run(){
     can_rmm.attach(CAN_recieve, CAN::RxIrq);
 
     motor_init();
@@ -66,4 +66,5 @@ void setup(){
     tic_motor.attach(&motorCallback,1ms); //割り込みタイマーをオンにする
     thread_sleep_for(50);
 
+    rmm.setTargetSpeed(target_speed);
 }
